@@ -90,6 +90,18 @@ Useful options:
 - `--idempotency-key KEY` make retries safe
 - `--config FILE` use a non-default setup config
 - `--token TOKEN` only when env/config/file token discovery is unavailable
+- `--dry-run` show resolved server/endpoint/options/token source without sending HTTP or printing the token
+- `--json` emit machine-readable JSON without prose
+
+## Diagnostics
+
+If sending fails or hosted setup is uncertain, run the doctor from the skill directory:
+
+```bash
+node scripts/inro-doctor.mjs --server https://inro.example.com --json
+```
+
+It checks config/env/token resolution, local token permissions for localhost, API reachability, and common HTTP/proxy/TLS failures without printing bearer tokens.
 
 ## Direct HTTP contract
 
