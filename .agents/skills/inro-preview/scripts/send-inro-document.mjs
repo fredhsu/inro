@@ -11,11 +11,14 @@ if (args.help || args._.length !== 1) {
 }
 
 const filePath = args._[0];
-const serverUrl = String(args.server ?? process.env.INRO_SERVER_URL ?? "http://127.0.0.1:4317").replace(/\/$/, "");
-const token = String(args.token ?? process.env.INRO_TOKEN ?? readToken(args["data-dir"]));
+const config = readClientConfig(args.config);
+const serverUrl = normalizeServerUrl(args.server ?? process.env.INRO_SERVER_URL ?? config?.serverUrl ?? "http://127.0.0.1:4317");
+const token = args.token ?? process.env.INRO_TOKEN ?? tokenFromConfig(config, serverUrl) ?? readLocalTokenIfLocal(serverUrl, args["data-dir"]);
 
-if (!token || token === "undefined") {
-  fail("No Inro token found. Set INRO_TOKEN, pass --token, or start Inro once so ~/.inro/token exists.");
+if (!token) {
+  fail(isLocalServer(serverUrl)
+    ? "No Inro token found. Set INRO_TOKEN, pass --token, run setup-inro-skill.mjs, or start Inro once so ~/.inro/token exists."
+    : "No token configured for hosted Inro server. Run setup-inro-skill.mjs --server URL --token TOKEN, set INRO_TOKEN, or pass --token.");
 }
 
 const content = readFileSync(filePath, "utf8");
@@ -23,7 +26,7 @@ const format = String(args.format ?? inferFormat(filePath));
 if (format !== "markdown" && format !== "html") fail("--format must be markdown or html");
 
 const title = String(args.title ?? inferTitle(filePath));
-const sourceAgent = String(args["source-agent"] ?? process.env.INRO_SOURCE_AGENT ?? "llm-agent");
+const sourceAgent = String(args["source-agent"] ?? process.env.INRO_SOURCE_AGENT ?? config?.sourceAgent ?? "llm-agent");
 const documentId = args["document-id"] ? String(args["document-id"]) : undefined;
 
 const payload = documentId
@@ -84,9 +87,42 @@ function parseArgs(argv) {
   return parsed;
 }
 
-function readToken(dataDir) {
+function defaultConfigPath() {
+  return join(homedir(), ".inro", "client-config.json");
+}
+
+function readClientConfig(configPath) {
+  const path = String(configPath ?? defaultConfigPath());
+  if (!existsSync(path)) return undefined;
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    if (!parsed || typeof parsed !== "object") fail(`Invalid Inro client config at ${path}`);
+    return parsed;
+  } catch (error) {
+    fail(`Could not read Inro client config at ${path}: ${error instanceof Error ? error.message : error}`);
+  }
+}
+
+function normalizeServerUrl(value) {
+  const url = new URL(String(value));
+  if (url.protocol !== "http:" && url.protocol !== "https:") fail("--server must be an http or https URL");
+  return url.toString().replace(/\/$/, "");
+}
+
+function tokenFromConfig(config, serverUrl) {
+  if (!config?.token || !config?.serverUrl) return undefined;
+  return normalizeServerUrl(config.serverUrl) === serverUrl ? String(config.token) : undefined;
+}
+
+function readLocalTokenIfLocal(serverUrl, dataDir) {
+  if (!isLocalServer(serverUrl)) return undefined;
   const tokenPath = join(dataDir ? String(dataDir) : join(homedir(), ".inro"), "token");
   return existsSync(tokenPath) ? readFileSync(tokenPath, "utf8").trim() : undefined;
+}
+
+function isLocalServer(serverUrl) {
+  const host = new URL(serverUrl).hostname;
+  return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]";
 }
 
 function inferFormat(path) {
@@ -118,9 +154,10 @@ Usage:
   node scripts/send-inro-document.mjs FILE [options]
 
 Options:
-  --server URL                 Inro server URL, default http://127.0.0.1:4317
-  --token TOKEN                Bearer token; otherwise INRO_TOKEN or ~/.inro/token
-  --data-dir DIR               Directory containing token file
+  --server URL                 Inro server URL; otherwise INRO_SERVER_URL, config, or localhost
+  --token TOKEN                Bearer token; otherwise INRO_TOKEN, matching config, or local ~/.inro/token
+  --config FILE                Client config from setup-inro-skill.mjs, default ~/.inro/client-config.json
+  --data-dir DIR               Directory containing local server token file
   --title TITLE                Title for a new Document
   --format markdown|html       Override format inference
   --source-agent NAME          Source Agent identity, default llm-agent
