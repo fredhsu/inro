@@ -1,0 +1,30 @@
+{
+  "name": "inro",
+  "version": "0.1.0",
+  "description": "Local inbox for agent-generated Documents.",
+  "type": "module",
+  "bin": {
+    "inro": "./dist/cli/inro.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli/inro.ts serve",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/cli/inro.js serve",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cookie": "latest",
+    "better-sqlite3": "latest",
+    "fastify": "latest",
+    "katex": "latest",
+    "markdown-it": "latest"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "latest",
+    "@types/markdown-it": "latest",
+    "@types/node": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}
