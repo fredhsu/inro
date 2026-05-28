@@ -16,6 +16,22 @@ describe("Rendering", () => {
     assert.match(rendered.html, /x\^2|x2/);
   });
 
+  it("renders Markdown math as KaTeX HTML without enabling raw Markdown HTML", () => {
+    const rendered = renderRevision({
+      format: "markdown",
+      content: "Inline $x^2$.\n\n$$\\frac{1}{2}$$\n\n<script>alert(1)</script>",
+    });
+
+    assert.equal(rendered.mode, "inline");
+    assert.match(rendered.html, /<span class="math math-inline"><span class="katex">/);
+    assert.match(rendered.html, /<div class="math math-display"><span class="katex-display">/);
+    assert.match(rendered.html, /<math xmlns="http:\/\/www\.w3\.org\/1998\/Math\/MathML"/);
+    assert.doesNotMatch(rendered.html, /&lt;span class=.katex/);
+    assert.doesNotMatch(rendered.html, /href="http:\/\/www\.w3\.org\/1998\/Math\/MathML"/);
+    assert.match(rendered.html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+    assert.doesNotMatch(rendered.html, /<script>alert\(1\)<\/script>/);
+  });
+
   it("represents HTML as sandboxed iframe content and does not scan it for LaTeX delimiters", () => {
     const rendered = renderRevision({
       format: "html",
