@@ -1,5 +1,5 @@
 ---
-name: inro-preview
+name: inro
 description: Sends generated Markdown or HTML Documents to an Inro preview inbox through its CLI or authenticated HTTP API, including hosted Inro servers on another machine. Use when the user asks to create, preview, publish, send, open, or preserve an agent-generated document in Inro, especially Markdown or HTML docs.
 ---
 
@@ -225,3 +225,4 @@ Successful responses include `documentId`, `revisionId`, `latestUrl`, and `revis
 - **CORS errors**: the skill helper and CLI are server-side Node calls, so browser CORS does not apply. CORS only matters if a browser page directly calls the API; debug helper/CLI failures as network/auth/base-path problems instead.
 - **Setup helper verifies localhost but sends to remote fail**: you may have configured `http://127.0.0.1:4317` or used a localhost token by mistake. Re-run setup with the remote URL and remote token.
 - **Returned URLs use `localhost`/`127.0.0.1` and do not open from a phone/laptop**: send using the externally reachable `--server` URL so relative URLs are reported with that base. If the server itself returns absolute localhost URLs, use/copy the path portion (`/d/...`) onto the hosted base URL, and configure the hosted server/proxy to advertise a public base URL when that option is available.
+- **`better-sqlite3` `NODE_MODULE_VERSION` mismatch when starting in the background**: Hermes foreground and background shells may resolve different Node binaries. Check both (`node -p 'process.versions.modules'` in foreground and background), rebuild native deps with the Node you will actually run, and invoke that Node explicitly, e.g. `/usr/bin/node dist/cli/inro.js serve ...`.
