@@ -66,11 +66,13 @@ describe("HTTP API and browser UI", () => {
       assert.ok(body.revisionId);
       assert.equal(body.latestUrl, `/d/${body.documentId}`);
       assert.equal(body.revisionUrl, `/d/${body.documentId}/r/${body.revisionId}`);
+      store.updateLatestRevision(body.documentId, body.revisionId, "2025-05-10T15:45:00.000Z", "markdown");
 
       const index = await app.inject({ method: "GET", url: "/", headers: auth(token) });
       assert.equal(index.statusCode, 200);
       assert.match(index.body, /Calculus note/);
       assert.match(index.body, /test-agent/);
+      assert.match(index.body, /<time datetime="2025-05-10T15:45:00\.000Z" title="2025-05-10T15:45:00\.000Z">May 10, 2025,/);
 
       const detail = await app.inject({ method: "GET", url: body.latestUrl, headers: auth(token) });
       assert.equal(detail.statusCode, 200);

@@ -144,10 +144,11 @@ export function buildInroServer(options: BuildServerOptions): FastifyInstance {
   app.get("/", async (_request, reply) => {
     const rows = documents.listDocuments().map((document) => {
       const multiple = document.sourceAgents.length > 1 ? " <span class=\"badge\">multiple Source Agents</span>" : "";
+      const updated = formatTimestamp(document.updatedAt);
       return `<tr>
         <td><a href="/d/${document.id}">${escapeHtml(document.title)}</a></td>
         <td>${escapeHtml(document.format)}</td>
-        <td>${escapeHtml(document.updatedAt)}</td>
+        <td><time datetime="${escapeHtml(document.updatedAt)}" title="${escapeHtml(document.updatedAt)}">${escapeHtml(updated)}</time></td>
         <td>${document.revisionCount}</td>
         <td>${escapeHtml(document.latestSourceAgent)}${multiple}</td>
       </tr>`;
@@ -212,6 +213,12 @@ function responseFor(documentId: string, revisionId: string, publicBaseUrl: stri
   const revisionUrl = `/d/${documentId}/r/${revisionId}`;
   const base = publicBaseUrl.replace(/\/$/, "");
   return { documentId, revisionId, latestUrl, revisionUrl, absoluteLatestUrl: `${base}${latestUrl}`, absoluteRevisionUrl: `${base}${revisionUrl}` };
+}
+
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
 function documentPage(input: { label: string; document: ReturnType<ReturnType<typeof createDocumentService>["getDocument"]> extends infer D ? NonNullable<D> : never; revision: NonNullable<ReturnType<ReturnType<typeof createDocumentService>["getRevision"]>>; revisions: NonNullable<ReturnType<ReturnType<typeof createDocumentService>["getRevision"]>>[] }) {
