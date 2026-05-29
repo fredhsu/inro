@@ -1,8 +1,6 @@
-export interface LiveEvent {
-  type: "document-created" | "latest-revision-changed" | "revision-added";
-  documentId: string;
-  revisionId: string;
-}
+export type LiveEvent =
+  | { type: "document-created" | "latest-revision-changed" | "revision-added"; documentId: string; revisionId: string }
+  | { type: "document-deleted"; documentId: string };
 
 type Listener = (event: LiveEvent) => void;
 

@@ -32,6 +32,18 @@ _Avoid_: Rendered version, raw preview
 An optional human-readable note describing what changed in a Revision.
 _Avoid_: Commit message, label
 
+**Submission**:
+An external agent request that creates a new Document or adds a Revision to an existing Document.
+_Avoid_: Upload, send request
+
+**Idempotency Key**:
+An agent-supplied retry identifier that makes repeated Submissions return the original result instead of creating duplicate Revisions.
+_Avoid_: Retry token, dedupe key
+
+**Document Deletion**:
+A permanent removal of a Document and all of its Revisions.
+_Avoid_: Entry deletion, archive, hide
+
 ## Relationships
 
 - A **Document** has one or more **Revisions**.
@@ -42,6 +54,10 @@ _Avoid_: Commit message, label
 - A **Source Agent** is recorded on each **Revision**.
 - A **Revision** can be viewed as a **Sandboxed Preview**.
 - A **Revision** may have one **Revision Summary**.
+- A **Submission** creates exactly one **Revision**.
+- A **Submission** either creates one **Document** or targets one existing **Document**.
+- An **Idempotency Key** applies to one **Source Agent** and one Submission target.
+- A **Document Deletion** removes exactly one **Document** and all of its **Revisions**.
 
 ## Example dialogue
 
@@ -54,3 +70,6 @@ _Avoid_: Commit message, label
 - "title key" implied display titles could identify **Documents**; resolved: use **Document Key** for intentional identity, while titles remain display-only.
 - "rendered version" was too vague for unsafe HTML; resolved: **Sandboxed Preview** is the default safe view.
 - "overwrite" was used to mean advancing a **Document** to its latest **Revision**, not mutating an existing **Revision**.
+- "entries" was used for listing items; resolved: these are **Documents**, and deletion means **Document Deletion**.
+- "send" is a CLI action; resolved: the domain concept is a **Submission**.
+- **Idempotency Key** scope is per **Source Agent** and Submission target, not global per **Source Agent**.

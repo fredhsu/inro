@@ -119,7 +119,7 @@ describe("HTTP API and browser UI", () => {
     }
   });
 
-  it("deduplicates retry-safe submissions by Source Agent, endpoint, and Idempotency Key", async () => {
+  it("deduplicates retry-safe Submissions by Source Agent, target, and Idempotency Key", async () => {
     const dir = mkdtempSync(join(tmpdir(), "inro-api-"));
     const store = openInroDatabase(join(dir, "inro.sqlite"));
     const app = buildInroServer({ store, token: "token", publicBaseUrl: "http://127.0.0.1:0" });
@@ -133,6 +133,147 @@ describe("HTTP API and browser UI", () => {
 
       const index = await app.inject({ method: "GET", url: "/", headers: auth("token") });
       assert.match(index.body, /<td>1<\/td>/);
+    } finally {
+      await app.close();
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("shows minimal htmx Delete Document controls in the listing and reader", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "inro-api-"));
+    const store = openInroDatabase(join(dir, "inro.sqlite"));
+    const app = buildInroServer({ store, token: "token", publicBaseUrl: "http://127.0.0.1:0" });
+    try {
+      const created = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { title: "Danger & Math", format: "markdown", content: "one", sourceAgent: "a" } });
+      const { documentId } = created.json() as { documentId: string };
+
+      const index = await app.inject({ method: "GET", url: "/", headers: auth("token") });
+      assert.equal(index.statusCode, 200);
+      assert.match(index.body, /htmx\.org/);
+      assert.match(index.body, new RegExp(`hx-delete="/d/${documentId}"`));
+      assert.match(index.body, /hx-target="closest tr"/);
+      assert.match(index.body, /Delete Document/);
+      assert.match(index.body, /data-confirm="Delete “Danger &amp; Math” and all of its Revisions\? This cannot be undone\."/);
+      assert.match(index.body, /onclick="return confirm\(this\.dataset\.confirm\)"/);
+
+      const detail = await app.inject({ method: "GET", url: `/d/${documentId}`, headers: auth("token") });
+      assert.equal(detail.statusCode, 200);
+      assert.match(detail.body, new RegExp(`action="/d/${documentId}/delete"`));
+      assert.match(detail.body, new RegExp(`hx-delete="/d/${documentId}"`));
+      assert.match(detail.body, /hx-target="body"/);
+    } finally {
+      await app.close();
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("hard-deletes a Document from htmx and fallback browser routes", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "inro-api-"));
+    const store = openInroDatabase(join(dir, "inro.sqlite"));
+    const app = buildInroServer({ store, token: "token", publicBaseUrl: "http://127.0.0.1:0" });
+    try {
+      const rowDoc = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { title: "Row", format: "markdown", content: "one", sourceAgent: "a" } });
+      const rowId = (rowDoc.json() as { documentId: string }).documentId;
+      const rowDelete = await app.inject({ method: "DELETE", url: `/d/${rowId}`, headers: { ...auth("token"), "hx-request": "true" } });
+      assert.equal(rowDelete.statusCode, 204);
+      const rowDetail = await app.inject({ method: "GET", url: `/d/${rowId}`, headers: auth("token") });
+      assert.equal(rowDetail.statusCode, 404);
+
+      const pageDoc = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { title: "Page", format: "markdown", content: "two", sourceAgent: "a" } });
+      const pageId = (pageDoc.json() as { documentId: string }).documentId;
+      const pageDelete = await app.inject({ method: "DELETE", url: `/d/${pageId}`, headers: { ...auth("token"), "hx-request": "true", "hx-target": "body" } });
+      assert.equal(pageDelete.statusCode, 204);
+      assert.equal(pageDelete.headers["hx-redirect"], "/");
+
+      const fallbackDoc = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { title: "Fallback", format: "markdown", content: "three", sourceAgent: "a" } });
+      const fallbackId = (fallbackDoc.json() as { documentId: string }).documentId;
+      const fallbackDelete = await app.inject({ method: "POST", url: `/d/${fallbackId}/delete`, headers: auth("token") });
+      assert.equal(fallbackDelete.statusCode, 302);
+      assert.equal(fallbackDelete.headers.location, "/");
+      const fallbackDetail = await app.inject({ method: "GET", url: `/d/${fallbackId}`, headers: auth("token") });
+      assert.equal(fallbackDetail.statusCode, 404);
+    } finally {
+      await app.close();
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("publishes live events when a Document is deleted", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "inro-api-"));
+    const store = openInroDatabase(join(dir, "inro.sqlite"));
+    const globalEvents: unknown[] = [];
+    const documentEvents: unknown[] = [];
+    const liveEvents = {
+      publishGlobal: (event: unknown) => { globalEvents.push(event); },
+      publishDocument: (_documentId: string, event: unknown) => { documentEvents.push(event); },
+      subscribeGlobal: () => () => {},
+      subscribeDocument: () => () => {},
+    };
+    const app = buildInroServer({ store, token: "token", publicBaseUrl: "http://127.0.0.1:0", liveEvents });
+    try {
+      const created = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { title: "Delete event", format: "markdown", content: "one", sourceAgent: "a" } });
+      const { documentId } = created.json() as { documentId: string };
+      globalEvents.length = 0;
+
+      const deleted = await app.inject({ method: "DELETE", url: `/api/documents/${documentId}`, headers: auth("token") });
+      assert.equal(deleted.statusCode, 204);
+      assert.deepEqual(globalEvents, [{ type: "document-deleted", documentId }]);
+      assert.deepEqual(documentEvents, [{ type: "document-deleted", documentId }]);
+    } finally {
+      await app.close();
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("clears idempotency records that reference a hard-deleted Document", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "inro-api-"));
+    const store = openInroDatabase(join(dir, "inro.sqlite"));
+    const app = buildInroServer({ store, token: "token", publicBaseUrl: "http://127.0.0.1:0" });
+    try {
+      const payload = { title: "Retry Delete", format: "markdown", content: "one", sourceAgent: "agent", idempotencyKey: "retry-delete" };
+      const first = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload });
+      assert.equal(first.statusCode, 201);
+      const firstBody = first.json() as { documentId: string };
+
+      const deleted = await app.inject({ method: "DELETE", url: `/api/documents/${firstBody.documentId}`, headers: auth("token") });
+      assert.equal(deleted.statusCode, 204);
+
+      const retried = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { ...payload, title: "Retry Delete Recreated" } });
+      assert.equal(retried.statusCode, 201);
+      const retriedBody = retried.json() as { documentId: string };
+      assert.notEqual(retriedBody.documentId, firstBody.documentId);
+    } finally {
+      await app.close();
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("hard-deletes a Document and all Revisions through the API", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "inro-api-"));
+    const store = openInroDatabase(join(dir, "inro.sqlite"));
+    const app = buildInroServer({ store, token: "token", publicBaseUrl: "http://127.0.0.1:0" });
+    try {
+      const created = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { title: "Delete me", documentKey: "delete-me", format: "markdown", content: "one", sourceAgent: "a" } });
+      assert.equal(created.statusCode, 201);
+      const createdBody = created.json() as { documentId: string; revisionId: string };
+      const appended = await app.inject({ method: "POST", url: `/api/documents/${createdBody.documentId}/revisions`, headers: auth("token"), payload: { format: "markdown", content: "two", sourceAgent: "b" } });
+      assert.equal(appended.statusCode, 201);
+
+      const deleted = await app.inject({ method: "DELETE", url: `/api/documents/${createdBody.documentId}`, headers: auth("token") });
+      assert.equal(deleted.statusCode, 204);
+      assert.equal(deleted.body, "");
+
+      const detail = await app.inject({ method: "GET", url: `/d/${createdBody.documentId}`, headers: auth("token") });
+      assert.equal(detail.statusCode, 404);
+      const historical = await app.inject({ method: "GET", url: `/d/${createdBody.documentId}/r/${createdBody.revisionId}`, headers: auth("token") });
+      assert.equal(historical.statusCode, 404);
+      const recreated = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { title: "Recreated", documentKey: "delete-me", format: "markdown", content: "new", sourceAgent: "a" } });
+      assert.equal(recreated.statusCode, 201);
     } finally {
       await app.close();
       store.close();

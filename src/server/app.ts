@@ -4,6 +4,7 @@ import type { RevisionFormat } from "../domain/types.js";
 import { createLiveEvents, type LiveEvent, type LiveEvents } from "../live-events/live-events.js";
 import { escapeHtml, renderRevision } from "../rendering/rendering.js";
 import { DocumentKeyConflictError, DocumentNotFoundError, createDocumentService } from "../services/document-service.js";
+import { createSubmissionService } from "../services/submission-service.js";
 import type { InroStore } from "../persistence/sqlite.js";
 
 export interface BuildServerOptions {
@@ -38,6 +39,12 @@ export function buildInroServer(options: BuildServerOptions): FastifyInstance {
   void app.register(cookie);
   const documents = createDocumentService(options.store);
   const liveEvents = options.liveEvents ?? createLiveEvents();
+  const submissions = createSubmissionService({ documents, idempotencyRecords: options.store, liveEvents, publicBaseUrl: options.publicBaseUrl });
+  const deleteDocument = (documentId: string) => {
+    documents.deleteDocument(documentId);
+    liveEvents.publishGlobal({ type: "document-deleted", documentId });
+    liveEvents.publishDocument(documentId, { type: "document-deleted", documentId });
+  };
 
   app.setErrorHandler((error, _request, reply) => {
     if ((error as { statusCode?: number }).statusCode === 413) {
@@ -77,28 +84,28 @@ export function buildInroServer(options: BuildServerOptions): FastifyInstance {
     const validation = validateCreate(body);
     if (validation) return reply.status(400).send({ error: validation });
 
-    const idempotencyKey = emptyToUndefined(body.idempotencyKey);
-    const endpoint = "/api/documents";
-    if (idempotencyKey) {
-      const prior = options.store.getIdempotencyRecord(body.sourceAgent!, endpoint, idempotencyKey);
-      if (prior) return reply.status(200).send(prior);
-    }
-
     try {
-      const result = documents.createDocument({
-        title: body.title!,
-        documentKey: emptyToUndefined(body.documentKey),
+      const outcome = submissions.submitRevision({
+        target: { kind: "new-document", title: body.title!, documentKey: emptyToUndefined(body.documentKey) },
         format: body.format!,
         content: body.content!,
         sourceAgent: body.sourceAgent!,
         revisionSummary: emptyToUndefined(body.revisionSummary),
+        idempotencyKey: emptyToUndefined(body.idempotencyKey),
       });
-      const response = responseFor(result.documentId, result.revisionId, options.publicBaseUrl);
-      if (idempotencyKey) options.store.saveIdempotencyRecord(body.sourceAgent!, endpoint, idempotencyKey, response, new Date().toISOString());
-      liveEvents.publishGlobal({ type: "document-created", documentId: result.documentId, revisionId: result.revisionId });
-      return reply.status(201).send(response);
+      return reply.status(outcome.replayed ? 200 : 201).send(outcome.response);
     } catch (error) {
       if (error instanceof DocumentKeyConflictError) return reply.status(409).send({ error: error.message });
+      throw error;
+    }
+  });
+
+  app.delete("/api/documents/:id", async (request, reply) => {
+    try {
+      deleteDocument((request.params as { id: string }).id);
+      return reply.status(204).send();
+    } catch (error) {
+      if (error instanceof DocumentNotFoundError) return reply.status(404).send({ error: error.message });
       throw error;
     }
   });
@@ -107,25 +114,16 @@ export function buildInroServer(options: BuildServerOptions): FastifyInstance {
     const body = request.body as AppendRevisionBody;
     const validation = validateAppend(body);
     if (validation) return reply.status(400).send({ error: validation });
-    const idempotencyKey = emptyToUndefined(body.idempotencyKey);
-    const endpoint = "/api/documents/:id/revisions";
-    if (idempotencyKey) {
-      const prior = options.store.getIdempotencyRecord(body.sourceAgent!, endpoint, idempotencyKey);
-      if (prior) return reply.status(200).send(prior);
-    }
-
     try {
-      const result = documents.appendRevision((request.params as { id: string }).id, {
+      const outcome = submissions.submitRevision({
+        target: { kind: "existing-document", documentId: (request.params as { id: string }).id },
         format: body.format!,
         content: body.content!,
         sourceAgent: body.sourceAgent!,
         revisionSummary: emptyToUndefined(body.revisionSummary),
+        idempotencyKey: emptyToUndefined(body.idempotencyKey),
       });
-      const response = responseFor(result.documentId, result.revisionId, options.publicBaseUrl);
-      if (idempotencyKey) options.store.saveIdempotencyRecord(body.sourceAgent!, endpoint, idempotencyKey, response, new Date().toISOString());
-      liveEvents.publishGlobal({ type: "latest-revision-changed", documentId: result.documentId, revisionId: result.revisionId });
-      liveEvents.publishDocument(result.documentId, { type: "revision-added", documentId: result.documentId, revisionId: result.revisionId });
-      return reply.status(201).send(response);
+      return reply.status(outcome.replayed ? 200 : 201).send(outcome.response);
     } catch (error) {
       if (error instanceof DocumentNotFoundError) return reply.status(404).send({ error: error.message });
       throw error;
@@ -151,6 +149,7 @@ export function buildInroServer(options: BuildServerOptions): FastifyInstance {
         <td><time datetime="${escapeHtml(document.updatedAt)}" title="${escapeHtml(document.updatedAt)}">${escapeHtml(updated)}</time></td>
         <td>${document.revisionCount}</td>
         <td>${escapeHtml(document.latestSourceAgent)}${multiple}</td>
+        <td>${deleteDocumentForm(document, "row")}</td>
       </tr>`;
     }).join("\n");
 
@@ -158,12 +157,33 @@ export function buildInroServer(options: BuildServerOptions): FastifyInstance {
       <main>
         <h1>Documents</h1>
         <table>
-          <thead><tr><th>Title</th><th>Format</th><th>Updated</th><th>Revisions</th><th>Source Agent</th></tr></thead>
-          <tbody>${rows || "<tr><td colspan=\"5\">No Documents yet.</td></tr>"}</tbody>
+          <thead><tr><th>Title</th><th>Format</th><th>Updated</th><th>Revisions</th><th>Source Agent</th><th>Actions</th></tr></thead>
+          <tbody>${rows || "<tr><td colspan=\"6\">No Documents yet.</td></tr>"}</tbody>
         </table>
       </main>
       ${liveReloadScript("/events")}
     `));
+  });
+
+  app.delete("/d/:id", async (request, reply) => {
+    try {
+      deleteDocument((request.params as { id: string }).id);
+      if (request.headers["hx-target"] === "body") return reply.header("HX-Redirect", "/").status(204).send();
+      return reply.status(204).send();
+    } catch (error) {
+      if (error instanceof DocumentNotFoundError) return reply.status(404).type("text/html").send(page("Not found", "<p>Document not found.</p>"));
+      throw error;
+    }
+  });
+
+  app.post("/d/:id/delete", async (request, reply) => {
+    try {
+      deleteDocument((request.params as { id: string }).id);
+      return reply.redirect("/");
+    } catch (error) {
+      if (error instanceof DocumentNotFoundError) return reply.status(404).type("text/html").send(page("Not found", "<p>Document not found.</p>"));
+      throw error;
+    }
   });
 
   app.get("/d/:id", async (request, reply) => {
@@ -208,13 +228,6 @@ function openSse(request: FastifyRequest, reply: FastifyReply, subscribe: (send:
   request.raw.on("close", unsubscribe);
 }
 
-function responseFor(documentId: string, revisionId: string, publicBaseUrl: string) {
-  const latestUrl = `/d/${documentId}`;
-  const revisionUrl = `/d/${documentId}/r/${revisionId}`;
-  const base = publicBaseUrl.replace(/\/$/, "");
-  return { documentId, revisionId, latestUrl, revisionUrl, absoluteLatestUrl: `${base}${latestUrl}`, absoluteRevisionUrl: `${base}${revisionUrl}` };
-}
-
 function formatTimestamp(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -237,7 +250,10 @@ function documentPage(input: { label: string; document: ReturnType<ReturnType<ty
   return page(input.document.title, `
     <main>
       <p><a href="/">← Documents</a></p>
-      <h1>${escapeHtml(input.document.title)}</h1>
+      <div class="document-header">
+        <h1>${escapeHtml(input.document.title)}</h1>
+        ${deleteDocumentForm(input.document, "page")}
+      </div>
       <p class="label">${input.label}</p>
       <p>Format: ${escapeHtml(input.revision.format)} · Source Agent: ${escapeHtml(input.revision.sourceAgent)}</p>
       ${multiple}
@@ -253,6 +269,18 @@ function documentPage(input: { label: string; document: ReturnType<ReturnType<ty
   `);
 }
 
+function deleteDocumentForm(document: { id: string; title: string }, variant: "row" | "page"): string {
+  const target = variant === "row" ? "closest tr" : "body";
+  const swap = variant === "row" ? "outerHTML" : "innerHTML";
+  return `<form method="post" action="/d/${document.id}/delete" class="delete-document" hx-delete="/d/${document.id}" hx-target="${target}" hx-swap="${swap}">
+    <button type="submit" class="danger" data-confirm="${deleteConfirmation(document.title)}" onclick="return confirm(this.dataset.confirm)">Delete Document</button>
+  </form>`;
+}
+
+function deleteConfirmation(title: string): string {
+  return escapeHtml(`Delete “${title}” and all of its Revisions? This cannot be undone.`);
+}
+
 function liveReloadScript(path: string): string {
   return `<script>
     (() => {
@@ -262,6 +290,7 @@ function liveReloadScript(path: string): string {
       events.addEventListener("document-created", reload);
       events.addEventListener("latest-revision-changed", reload);
       events.addEventListener("revision-added", reload);
+      events.addEventListener("document-deleted", reload);
     })();
   </script>`;
 }
@@ -274,6 +303,7 @@ function page(title: string, body: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)} · Inro</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
   <style>
     body { font: 16px/1.5 system-ui, sans-serif; margin: 0; background: #f7f4ef; color: #211a14; }
     main { max-width: 960px; margin: 2rem auto; padding: 1rem; background: white; border: 1px solid #e3d8ca; border-radius: 12px; }
@@ -283,6 +313,9 @@ function page(title: string, body: string): string {
     .preview { padding: 1rem; border: 1px solid #eadfd2; border-radius: 8px; }
     .preview-frame { width: 100%; min-height: 70vh; border: 1px solid #eadfd2; border-radius: 8px; background: white; }
     .label, .badge, .notice { font-weight: 700; color: #7a3f00; }
+    .document-header { display: flex; justify-content: space-between; gap: 1rem; align-items: start; }
+    .delete-document { margin: 0; }
+    .danger { color: #8a1f11; border: 1px solid #c99; background: #fff8f6; border-radius: 6px; padding: .35rem .6rem; cursor: pointer; }
   </style>
 </head>
 <body>${body}</body>

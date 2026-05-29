@@ -28,12 +28,13 @@ export interface InroStore {
   getDocument(id: string): DocumentRecord | undefined;
   getDocumentByKey(documentKey: string): DocumentRecord | undefined;
   listDocuments(): DocumentRecord[];
+  deleteDocument(documentId: string): boolean;
   updateLatestRevision(documentId: string, revisionId: string, updatedAt: string, format: "markdown" | "html"): void;
   createRevision(revision: RevisionRecord): void;
   getRevision(id: string): RevisionRecord | undefined;
   listRevisions(documentId: string): RevisionRecord[];
-  getIdempotencyRecord(sourceAgent: string, endpoint: string, key: string): unknown | undefined;
-  saveIdempotencyRecord(sourceAgent: string, endpoint: string, key: string, response: unknown, createdAt: string): void;
+  getIdempotencyRecord(sourceAgent: string, scope: string, key: string): unknown | undefined;
+  saveIdempotencyRecord(sourceAgent: string, scope: string, key: string, response: unknown, createdAt: string): void;
   close(): void;
 }
 
@@ -112,6 +113,18 @@ class SqliteStore implements InroStore {
     return rows.map(mapDocument);
   }
 
+  deleteDocument(documentId: string): boolean {
+    const result = this.db.transaction((id: string) => {
+      const deleted = this.db.prepare("DELETE FROM documents WHERE id = ?").run(id);
+      if (deleted.changes > 0) {
+        this.db.prepare("DELETE FROM idempotency_records WHERE response_json LIKE ?")
+          .run(`%\"documentId\":\"${id}\"%`);
+      }
+      return deleted;
+    })(documentId);
+    return result.changes > 0;
+  }
+
   updateLatestRevision(documentId: string, revisionId: string, updatedAt: string, format: "markdown" | "html"): void {
     this.db.prepare("UPDATE documents SET latest_revision_id = ?, updated_at = ?, format = ? WHERE id = ?")
       .run(revisionId, updatedAt, format, documentId);
@@ -134,17 +147,17 @@ class SqliteStore implements InroStore {
     return rows.map(mapRevision);
   }
 
-  getIdempotencyRecord(sourceAgent: string, endpoint: string, key: string): unknown | undefined {
+  getIdempotencyRecord(sourceAgent: string, scope: string, key: string): unknown | undefined {
     const row = this.db.prepare("SELECT response_json FROM idempotency_records WHERE source_agent = ? AND endpoint = ? AND idempotency_key = ?")
-      .get(sourceAgent, endpoint, key) as { response_json: string } | undefined;
+      .get(sourceAgent, scope, key) as { response_json: string } | undefined;
     return row ? JSON.parse(row.response_json) : undefined;
   }
 
-  saveIdempotencyRecord(sourceAgent: string, endpoint: string, key: string, response: unknown, createdAt: string): void {
+  saveIdempotencyRecord(sourceAgent: string, scope: string, key: string, response: unknown, createdAt: string): void {
     this.db.prepare(`
       INSERT OR IGNORE INTO idempotency_records (source_agent, endpoint, idempotency_key, response_json, created_at)
       VALUES (?, ?, ?, ?, ?)
-    `).run(sourceAgent, endpoint, key, JSON.stringify(response), createdAt);
+    `).run(sourceAgent, scope, key, JSON.stringify(response), createdAt);
   }
 
   close(): void {

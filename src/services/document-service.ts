@@ -42,6 +42,7 @@ export interface DocumentService {
   appendRevision(documentId: string, input: AppendRevisionInput): RevisionResult;
   getDocument(documentId: string): DocumentView | undefined;
   listDocuments(): DocumentView[];
+  deleteDocument(documentId: string): void;
   getRevision(revisionId: string): RevisionRecord | undefined;
   listRevisions(documentId: string): RevisionRecord[];
 }
@@ -108,6 +109,12 @@ class DefaultDocumentService implements DocumentService {
 
   listDocuments(): DocumentView[] {
     return this.store.listDocuments().map((document) => this.enrich(document));
+  }
+
+  deleteDocument(documentId: string): void {
+    if (!this.store.deleteDocument(documentId)) {
+      throw new DocumentNotFoundError(documentId);
+    }
   }
 
   getRevision(revisionId: string): RevisionRecord | undefined {
