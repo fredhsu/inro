@@ -303,9 +303,10 @@ function page(title: string, body: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)} · Inro</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css">
+  <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap">
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
   <style>
-    body { font: 16px/1.5 system-ui, sans-serif; margin: 0; background: #f7f4ef; color: #211a14; }
+    body { font: 16px/1.5 "Satoshi", system-ui, sans-serif; margin: 0; background: #f7f4ef; color: #211a14; }
     main { max-width: 960px; margin: 2rem auto; padding: 1rem; background: white; border: 1px solid #e3d8ca; border-radius: 12px; }
     table { width: 100%; border-collapse: collapse; } th, td { padding: .5rem; border-bottom: 1px solid #eadfD2; text-align: left; }
     pre { padding: 1rem; overflow: auto; background: #191714; color: #f8f4eb; border-radius: 8px; }
