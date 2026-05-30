@@ -1,8 +1,0 @@
-
-> inro@0.1.0 dev
-> tsx src/cli/inro.ts serve --host 0.0.0.0 --port 4317
-
-WARNING: Inro is binding to a non-localhost address. Only use this on a trusted LAN/Tailscale network; anyone who has the token can access submitted Documents.
-Inro listening on http://127.0.0.1:4317
-Data directory: /home/fred/.inro
-Bearer token file: /home/fred/.inro/token
