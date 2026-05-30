@@ -232,31 +232,18 @@ describe("HTTP API and browser UI", () => {
     }
   });
 
-  it("hard-deletes a Document from htmx and fallback browser routes", async () => {
+  it("hard-deletes a Document from the browser delete form", async () => {
     const dir = mkdtempSync(join(tmpdir(), "inro-api-"));
     const store = openInroDatabase(join(dir, "inro.sqlite"));
     const app = buildInroServer({ store, token: "token", publicBaseUrl: "http://127.0.0.1:0" });
     try {
-      const rowDoc = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { title: "Row", format: "markdown", content: "one", sourceAgent: "a" } });
-      const rowId = (rowDoc.json() as { documentId: string }).documentId;
-      const rowDelete = await app.inject({ method: "DELETE", url: `/d/${rowId}`, headers: { ...auth("token"), "hx-request": "true" } });
-      assert.equal(rowDelete.statusCode, 204);
-      const rowDetail = await app.inject({ method: "GET", url: `/d/${rowId}`, headers: auth("token") });
-      assert.equal(rowDetail.statusCode, 404);
-
-      const pageDoc = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { title: "Page", format: "markdown", content: "two", sourceAgent: "a" } });
-      const pageId = (pageDoc.json() as { documentId: string }).documentId;
-      const pageDelete = await app.inject({ method: "DELETE", url: `/d/${pageId}`, headers: { ...auth("token"), "hx-request": "true", "hx-target": "body" } });
-      assert.equal(pageDelete.statusCode, 204);
-      assert.equal(pageDelete.headers["hx-redirect"], "/");
-
-      const fallbackDoc = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { title: "Fallback", format: "markdown", content: "three", sourceAgent: "a" } });
-      const fallbackId = (fallbackDoc.json() as { documentId: string }).documentId;
-      const fallbackDelete = await app.inject({ method: "POST", url: `/d/${fallbackId}/delete`, headers: auth("token") });
-      assert.equal(fallbackDelete.statusCode, 302);
-      assert.equal(fallbackDelete.headers.location, "/");
-      const fallbackDetail = await app.inject({ method: "GET", url: `/d/${fallbackId}`, headers: auth("token") });
-      assert.equal(fallbackDetail.statusCode, 404);
+      const doc = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { title: "Doc", format: "markdown", content: "one", sourceAgent: "a" } });
+      const id = (doc.json() as { documentId: string }).documentId;
+      const deleted = await app.inject({ method: "POST", url: `/d/${id}/delete`, headers: auth("token") });
+      assert.equal(deleted.statusCode, 302);
+      assert.equal(deleted.headers.location, "/");
+      const detail = await app.inject({ method: "GET", url: `/d/${id}`, headers: auth("token") });
+      assert.equal(detail.statusCode, 404);
     } finally {
       await app.close();
       store.close();

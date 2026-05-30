@@ -167,17 +167,6 @@ export function buildInroServer(options: BuildServerOptions): FastifyInstance {
     `));
   });
 
-  app.delete("/d/:id", async (request, reply) => {
-    try {
-      deleteDocument((request.params as { id: string }).id);
-      if (request.headers["hx-target"] === "body") return reply.header("HX-Redirect", "/").status(204).send();
-      return reply.status(204).send();
-    } catch (error) {
-      if (error instanceof DocumentNotFoundError) return reply.status(404).type("text/html").send(page("Not found", "<p>Document not found.</p>"));
-      throw error;
-    }
-  });
-
   app.post("/d/:id/delete", async (request, reply) => {
     try {
       deleteDocument((request.params as { id: string }).id);
@@ -423,12 +412,10 @@ function page(title: string, body: string): string {
     .ledger .title-cell.unread a { font-weight: 600; }
     .ledger .title-cell a:hover { color: var(--cinnabar); }
     .unread-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 999px; background: var(--cinnabar); margin-right: .45rem; vertical-align: .08em; }
-    .ledger .num { font-variant-numeric: tabular-nums; color: var(--ink-soft); }
     .empty { display: flex; flex-direction: column; align-items: center; gap: .65rem; text-align: center; color: var(--ink-soft); padding: 3rem 1rem; }
     .empty .icon { width: 1.9rem; height: 1.9rem; color: var(--line); }
     .empty p { margin: 0; }
 
-    .tag { display: inline-flex; align-items: center; gap: .35rem; font: 600 .68rem/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); border: 1px solid var(--line); border-radius: 999px; padding: .3rem .55rem; }
     .agent { display: inline-flex; align-items: center; gap: .4rem; }
     .agent .icon { color: var(--ink-soft); }
     .badge { display: inline-block; font-size: .64rem; letter-spacing: .08em; text-transform: uppercase; color: var(--cinnabar-deep); border: 1px solid rgba(189,59,42,.4); border-radius: 999px; padding: .14rem .45rem; margin-left: .4rem; }
@@ -524,10 +511,6 @@ const iconPaths: Record<string, string> = {
 
 function icon(name: keyof typeof iconPaths): string {
   return `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name]}</svg>`;
-}
-
-function formatTag(format: string): string {
-  return `<span class="tag">${icon(format === "html" ? "code" : "markdown")}${escapeHtml(format)}</span>`;
 }
 
 function validateCreate(body: CreateDocumentBody): string | undefined {
