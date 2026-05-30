@@ -336,7 +336,7 @@ function page(title: string, body: string): string {
       content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .04;
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     }
-    .wrap { position: relative; z-index: 1; max-width: 880px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+    .wrap { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
 
     .masthead { display: flex; align-items: center; gap: .85rem; margin-bottom: 2.5rem; animation: rise .55s both; }
     .seal {
@@ -360,7 +360,7 @@ function page(title: string, body: string): string {
 
     .ledger { width: 100%; border-collapse: collapse; font-size: .95rem; }
     .ledger thead th { text-align: left; font-weight: 500; font-size: .68rem; letter-spacing: .13em; text-transform: uppercase; color: var(--ink-soft); padding: 0 .75rem .7rem; border-bottom: 1px solid var(--line); }
-    .ledger tbody td { padding: .9rem .75rem; border-bottom: 1px solid var(--line); vertical-align: baseline; }
+    .ledger tbody td { padding: .9rem .75rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
     .ledger tbody tr:last-child td { border-bottom: 0; }
     .ledger tbody tr:hover td { background: rgba(189,59,42,.04); }
     .ledger .title-cell a { font-family: "Fraunces", Georgia, serif; font-size: 1.05rem; font-weight: 500; text-decoration: none; }
