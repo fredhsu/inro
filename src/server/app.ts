@@ -369,7 +369,7 @@ function page(title: string, body: string): string {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" />
   <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap" />
   <style>
     :root {
       --washi: #f1ead9;
@@ -402,12 +402,12 @@ function page(title: string, body: string): string {
       box-shadow: 0 2px 0 rgba(149,40,27,.5), inset 0 0 0 1px rgba(255,255,255,.14);
     }
     .wordmark { display: flex; flex-direction: column; text-decoration: none; color: var(--ink); }
-    .wordmark b { font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 1.7rem; letter-spacing: -.01em; line-height: 1; }
+    .wordmark b { font-family: "Newsreader", Georgia, serif; font-weight: 600; font-size: 1.7rem; letter-spacing: -.01em; line-height: 1; }
     .wordmark span { font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); margin-top: .4rem; }
 
     main { animation: rise .55s .08s both; }
-    h1 { font-family: "Fraunces", Georgia, serif; font-weight: 600; letter-spacing: -.015em; font-size: 2rem; margin: 0 0 1.25rem; }
-    h2 { font-family: "Fraunces", Georgia, serif; font-weight: 500; font-size: 1.3rem; margin: 2.75rem 0 1rem; }
+    h1 { font-family: "Newsreader", Georgia, serif; font-weight: 600; letter-spacing: -.015em; font-size: 2rem; margin: 0 0 1.25rem; }
+    h2 { font-family: "Newsreader", Georgia, serif; font-weight: 500; font-size: 1.3rem; margin: 2.75rem 0 1rem; }
     a { color: var(--ink); text-decoration-color: var(--line); text-underline-offset: 3px; }
     a:hover { text-decoration-color: var(--cinnabar); }
     .icon { width: 1em; height: 1em; flex: none; vertical-align: -.14em; }
@@ -419,7 +419,7 @@ function page(title: string, body: string): string {
     .ledger tbody td { padding: .9rem .75rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
     .ledger tbody tr:last-child td { border-bottom: 0; }
     .ledger tbody tr:hover td { background: rgba(189,59,42,.04); }
-    .ledger .title-cell a { font-family: "Fraunces", Georgia, serif; font-size: 1.05rem; font-weight: 500; text-decoration: none; }
+    .ledger .title-cell a { font-family: "Newsreader", Georgia, serif; font-size: 1.05rem; font-weight: 500; text-decoration: none; }
     .ledger .title-cell.unread a { font-weight: 600; }
     .ledger .title-cell a:hover { color: var(--cinnabar); }
     .unread-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 999px; background: var(--cinnabar); margin-right: .45rem; vertical-align: .08em; }
@@ -460,7 +460,7 @@ function page(title: string, body: string): string {
     .timeline li { position: relative; padding: 0 0 1.4rem 1.6rem; }
     .timeline li::before { content: ""; position: absolute; left: -5px; top: .4rem; width: 9px; height: 9px; border-radius: 50%; background: var(--washi); border: 1px solid var(--ink-soft); }
     .timeline li.latest::before { background: var(--cinnabar); border-color: var(--cinnabar); }
-    .timeline a { font-family: "Fraunces", Georgia, serif; font-weight: 500; text-decoration: none; }
+    .timeline a { font-family: "Newsreader", Georgia, serif; font-weight: 500; text-decoration: none; }
     .timeline .who { color: var(--ink-soft); font-size: .85rem; margin-left: .55rem; }
     .timeline em { display: block; color: var(--ink-soft); font-size: .9rem; margin-top: .15rem; }
 
@@ -482,7 +482,7 @@ function page(title: string, body: string): string {
     .login button:hover { filter: brightness(1.06); }
 
     .markdown-body :first-child { margin-top: 0; }
-    .markdown-body h1, .markdown-body h2, .markdown-body h3 { font-family: "Fraunces", Georgia, serif; line-height: 1.25; }
+    .markdown-body h1, .markdown-body h2, .markdown-body h3 { font-family: "Newsreader", Georgia, serif; line-height: 1.25; }
     .markdown-body h1 { font-size: 1.7rem; margin: 1.8rem 0 .8rem; }
     .markdown-body h2 { font-size: 1.35rem; margin: 1.6rem 0 .7rem; }
     .markdown-body h3 { font-size: 1.12rem; margin: 1.4rem 0 .6rem; }
