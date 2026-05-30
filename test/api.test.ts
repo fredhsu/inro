@@ -132,7 +132,7 @@ describe("HTTP API and browser UI", () => {
       assert.deepEqual(second.json(), first.json());
 
       const index = await app.inject({ method: "GET", url: "/", headers: auth("token") });
-      assert.match(index.body, /<td>1<\/td>/);
+      assert.match(index.body, /<td class="num">1<\/td>/);
     } finally {
       await app.close();
       store.close();
@@ -140,7 +140,7 @@ describe("HTTP API and browser UI", () => {
     }
   });
 
-  it("shows minimal htmx Delete Document controls in the listing and reader", async () => {
+  it("shows minimal Delete Document controls in the listing and reader", async () => {
     const dir = mkdtempSync(join(tmpdir(), "inro-api-"));
     const store = openInroDatabase(join(dir, "inro.sqlite"));
     const app = buildInroServer({ store, token: "token", publicBaseUrl: "http://127.0.0.1:0" });
@@ -150,18 +150,17 @@ describe("HTTP API and browser UI", () => {
 
       const index = await app.inject({ method: "GET", url: "/", headers: auth("token") });
       assert.equal(index.statusCode, 200);
-      assert.match(index.body, /htmx\.org/);
-      assert.match(index.body, new RegExp(`hx-delete="/d/${documentId}"`));
-      assert.match(index.body, /hx-target="closest tr"/);
-      assert.match(index.body, /Delete Document/);
+      assert.doesNotMatch(index.body, /htmx\.org/);
+      assert.doesNotMatch(index.body, /hx-delete/);
+      assert.match(index.body, new RegExp(`action="/d/${documentId}/delete"`));
+      assert.match(index.body, /Delete<\/button>/);
       assert.match(index.body, /data-confirm="Delete “Danger &amp; Math” and all of its Revisions\? This cannot be undone\."/);
       assert.match(index.body, /onclick="return confirm\(this\.dataset\.confirm\)"/);
 
       const detail = await app.inject({ method: "GET", url: `/d/${documentId}`, headers: auth("token") });
       assert.equal(detail.statusCode, 200);
       assert.match(detail.body, new RegExp(`action="/d/${documentId}/delete"`));
-      assert.match(detail.body, new RegExp(`hx-delete="/d/${documentId}"`));
-      assert.match(detail.body, /hx-target="body"/);
+      assert.doesNotMatch(detail.body, /hx-delete/);
     } finally {
       await app.close();
       store.close();
