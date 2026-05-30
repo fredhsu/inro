@@ -43,6 +43,8 @@ export interface DocumentService {
   getDocument(documentId: string): DocumentView | undefined;
   listDocuments(): DocumentView[];
   deleteDocument(documentId: string): void;
+  markRead(documentId: string): void;
+  markUnread(documentId: string): void;
   getRevision(revisionId: string): RevisionRecord | undefined;
   listRevisions(documentId: string): RevisionRecord[];
 }
@@ -117,6 +119,20 @@ class DefaultDocumentService implements DocumentService {
     }
   }
 
+  markRead(documentId: string): void {
+    const document = this.store.getDocument(documentId);
+    if (!document) throw new DocumentNotFoundError(documentId);
+    if (!this.store.markDocumentRead(documentId, document.latestRevisionId, new Date().toISOString())) {
+      throw new DocumentNotFoundError(documentId);
+    }
+  }
+
+  markUnread(documentId: string): void {
+    if (!this.store.markDocumentUnread(documentId)) {
+      throw new DocumentNotFoundError(documentId);
+    }
+  }
+
   getRevision(revisionId: string): RevisionRecord | undefined {
     return this.store.getRevision(revisionId);
   }
@@ -129,11 +145,14 @@ class DefaultDocumentService implements DocumentService {
     const revisions = this.store.listRevisions(document.id);
     const latest = revisions.find((revision) => revision.id === document.latestRevisionId) ?? revisions.at(-1);
     const sourceAgents = [...new Set(revisions.map((revision) => revision.sourceAgent))];
+    const isRead = document.lastReadRevisionId === document.latestRevisionId;
     return {
       ...document,
       revisionCount: revisions.length,
       latestSourceAgent: latest?.sourceAgent ?? "unknown",
       sourceAgents,
+      isRead,
+      isUnread: !isRead,
     };
   }
 }

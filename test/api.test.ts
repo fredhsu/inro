@@ -140,6 +140,66 @@ describe("HTTP API and browser UI", () => {
     }
   });
 
+  it("shows and updates read/unread state with server-rendered controls", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "inro-api-"));
+    const store = openInroDatabase(join(dir, "inro.sqlite"));
+    const app = buildInroServer({ store, token: "token", publicBaseUrl: "http://127.0.0.1:0" });
+    try {
+      const created = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { title: "Read Me", format: "markdown", content: "one", sourceAgent: "a" } });
+      const { documentId } = created.json() as { documentId: string };
+
+      const unreadIndex = await app.inject({ method: "GET", url: "/", headers: auth("token") });
+      assert.match(unreadIndex.body, /<td class="title-cell unread"><span class="unread-dot" aria-hidden="true"><\/span><a href="\/d\/[^"]+">Read Me<\/a><\/td>/);
+      assert.doesNotMatch(unreadIndex.body, /unread-badge/);
+      assert.match(unreadIndex.body, new RegExp(`action="/d/${documentId}/read"`));
+      assert.match(unreadIndex.body, />Mark read<\/button>/);
+
+      const markedRead = await app.inject({ method: "POST", url: `/d/${documentId}/read`, headers: auth("token") });
+      assert.equal(markedRead.statusCode, 302);
+      assert.equal(markedRead.headers.location, "/");
+      const readIndex = await app.inject({ method: "GET", url: "/", headers: auth("token") });
+      assert.doesNotMatch(readIndex.body, /<td class="title-cell unread">[\s\S]*Read Me/);
+      assert.match(readIndex.body, new RegExp(`action="/d/${documentId}/unread"`));
+      assert.match(readIndex.body, />Mark unread<\/button>/);
+
+      const markedUnread = await app.inject({ method: "POST", url: `/d/${documentId}/unread`, headers: auth("token") });
+      assert.equal(markedUnread.statusCode, 302);
+      const unreadAgain = await app.inject({ method: "GET", url: "/", headers: auth("token") });
+      assert.match(unreadAgain.body, /<td class="title-cell unread">[\s\S]*Read Me/);
+    } finally {
+      await app.close();
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("marks only the latest Revision as read when it is opened", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "inro-api-"));
+    const store = openInroDatabase(join(dir, "inro.sqlite"));
+    const app = buildInroServer({ store, token: "token", publicBaseUrl: "http://127.0.0.1:0" });
+    try {
+      const created = await app.inject({ method: "POST", url: "/api/documents", headers: auth("token"), payload: { title: "Reader", format: "markdown", content: "one", sourceAgent: "a" } });
+      const { documentId, revisionId } = created.json() as { documentId: string; revisionId: string };
+      await app.inject({ method: "POST", url: `/d/${documentId}/read`, headers: auth("token") });
+      await app.inject({ method: "POST", url: `/api/documents/${documentId}/revisions`, headers: auth("token"), payload: { format: "markdown", content: "two", sourceAgent: "b" } });
+
+      const historical = await app.inject({ method: "GET", url: `/d/${documentId}/r/${revisionId}`, headers: auth("token") });
+      assert.equal(historical.statusCode, 200);
+      let index = await app.inject({ method: "GET", url: "/", headers: auth("token") });
+      assert.match(index.body, /<td class="title-cell unread">[\s\S]*Reader/);
+
+      const latest = await app.inject({ method: "GET", url: `/d/${documentId}`, headers: auth("token") });
+      assert.equal(latest.statusCode, 200);
+      assert.match(latest.body, /<span class="read-state read">Read<\/span>/);
+      index = await app.inject({ method: "GET", url: "/", headers: auth("token") });
+      assert.doesNotMatch(index.body, /<td class="title-cell unread">[\s\S]*Reader/);
+    } finally {
+      await app.close();
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("shows minimal Delete Document controls in the listing and reader", async () => {
     const dir = mkdtempSync(join(tmpdir(), "inro-api-"));
     const store = openInroDatabase(join(dir, "inro.sqlite"));

@@ -6,6 +6,8 @@ export interface DocumentRecord {
   title: string;
   format: RevisionFormat;
   latestRevisionId: string;
+  lastReadRevisionId?: string;
+  lastReadAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,4 +26,6 @@ export interface DocumentView extends DocumentRecord {
   revisionCount: number;
   latestSourceAgent: string;
   sourceAgents: string[];
+  isRead: boolean;
+  isUnread: boolean;
 }

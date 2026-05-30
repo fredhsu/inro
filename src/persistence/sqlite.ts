@@ -9,6 +9,8 @@ interface DocumentRow {
   title: string;
   format: "markdown" | "html";
   latest_revision_id: string;
+  last_read_revision_id: string | null;
+  last_read_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -30,6 +32,8 @@ export interface InroStore {
   listDocuments(): DocumentRecord[];
   deleteDocument(documentId: string): boolean;
   updateLatestRevision(documentId: string, revisionId: string, updatedAt: string, format: "markdown" | "html"): void;
+  markDocumentRead(documentId: string, revisionId: string, readAt: string): boolean;
+  markDocumentUnread(documentId: string): boolean;
   createRevision(revision: RevisionRecord): void;
   getRevision(id: string): RevisionRecord | undefined;
   listRevisions(documentId: string): RevisionRecord[];
@@ -60,6 +64,8 @@ function migrate(db: Database.Database): void {
       title TEXT NOT NULL,
       format TEXT NOT NULL CHECK (format IN ('markdown', 'html')),
       latest_revision_id TEXT NOT NULL,
+      last_read_revision_id TEXT,
+      last_read_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -86,6 +92,15 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_documents_updated_at ON documents(updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_revisions_document_created_at ON revisions(document_id, created_at ASC);
   `);
+  ensureColumn(db, "documents", "last_read_revision_id", "TEXT");
+  ensureColumn(db, "documents", "last_read_at", "TEXT");
+}
+
+function ensureColumn(db: Database.Database, table: string, column: string, definition: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!columns.some((info) => info.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
 }
 
 class SqliteStore implements InroStore {
@@ -93,9 +108,9 @@ class SqliteStore implements InroStore {
 
   createDocument(document: DocumentRecord): void {
     this.db.prepare(`
-      INSERT INTO documents (id, document_key, title, format, latest_revision_id, created_at, updated_at)
-      VALUES (@id, @documentKey, @title, @format, @latestRevisionId, @createdAt, @updatedAt)
-    `).run({ ...document, documentKey: document.documentKey ?? null });
+      INSERT INTO documents (id, document_key, title, format, latest_revision_id, last_read_revision_id, last_read_at, created_at, updated_at)
+      VALUES (@id, @documentKey, @title, @format, @latestRevisionId, @lastReadRevisionId, @lastReadAt, @createdAt, @updatedAt)
+    `).run({ ...document, documentKey: document.documentKey ?? null, lastReadRevisionId: document.lastReadRevisionId ?? null, lastReadAt: document.lastReadAt ?? null });
   }
 
   getDocument(id: string): DocumentRecord | undefined {
@@ -128,6 +143,18 @@ class SqliteStore implements InroStore {
   updateLatestRevision(documentId: string, revisionId: string, updatedAt: string, format: "markdown" | "html"): void {
     this.db.prepare("UPDATE documents SET latest_revision_id = ?, updated_at = ?, format = ? WHERE id = ?")
       .run(revisionId, updatedAt, format, documentId);
+  }
+
+  markDocumentRead(documentId: string, revisionId: string, readAt: string): boolean {
+    const result = this.db.prepare("UPDATE documents SET last_read_revision_id = ?, last_read_at = ? WHERE id = ?")
+      .run(revisionId, readAt, documentId);
+    return result.changes > 0;
+  }
+
+  markDocumentUnread(documentId: string): boolean {
+    const result = this.db.prepare("UPDATE documents SET last_read_revision_id = NULL, last_read_at = NULL WHERE id = ?")
+      .run(documentId);
+    return result.changes > 0;
   }
 
   createRevision(revision: RevisionRecord): void {
@@ -172,6 +199,8 @@ function mapDocument(row: DocumentRow): DocumentRecord {
     title: row.title,
     format: row.format,
     latestRevisionId: row.latest_revision_id,
+    lastReadRevisionId: row.last_read_revision_id ?? undefined,
+    lastReadAt: row.last_read_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

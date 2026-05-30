@@ -34,6 +34,8 @@ describe("Document Service", () => {
     assert.equal(document?.documentKey, "notes/main");
     assert.equal(document?.latestRevisionId, created.revisionId);
     assert.equal(document?.revisionCount, 1);
+    assert.equal(document?.isRead, false);
+    assert.equal(document?.isUnread, true);
 
     const revision = service.getRevision(created.revisionId);
     assert.equal(revision?.documentId, created.documentId);
@@ -78,6 +80,34 @@ describe("Document Service", () => {
     assert.deepEqual(document?.sourceAgents.sort(), ["agent-a", "agent-b"]);
     assert.equal(service.getRevision(first.revisionId)?.content, "one");
     assert.equal(service.getRevision(second.revisionId)?.content, "two");
+    store.close();
+  }));
+
+  it("tracks whether the latest Revision has been read", () => withStore((dbPath) => {
+    const store = openInroDatabase(dbPath);
+    const service = createDocumentService(store);
+
+    const first = service.createDocument({ title: "Status", format: "markdown", content: "one", sourceAgent: "agent-a" });
+    assert.equal(service.getDocument(first.documentId)?.isUnread, true);
+
+    service.markRead(first.documentId);
+    const read = service.getDocument(first.documentId);
+    assert.equal(read?.isRead, true);
+    assert.equal(read?.isUnread, false);
+    assert.equal(read?.lastReadRevisionId, first.revisionId);
+    assert.ok(read?.lastReadAt);
+
+    const second = service.appendRevision(first.documentId, { format: "markdown", content: "two", sourceAgent: "agent-b" });
+    const unreadAgain = service.getDocument(first.documentId);
+    assert.equal(unreadAgain?.latestRevisionId, second.revisionId);
+    assert.equal(unreadAgain?.lastReadRevisionId, first.revisionId);
+    assert.equal(unreadAgain?.isUnread, true);
+
+    service.markUnread(first.documentId);
+    const unread = service.getDocument(first.documentId);
+    assert.equal(unread?.isRead, false);
+    assert.equal(unread?.lastReadRevisionId, undefined);
+    assert.equal(unread?.lastReadAt, undefined);
     store.close();
   }));
 });

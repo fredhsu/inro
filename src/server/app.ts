@@ -145,13 +145,14 @@ export function buildInroServer(options: BuildServerOptions): FastifyInstance {
     const rows = documents.listDocuments().map((document) => {
       const multiple = document.sourceAgents.length > 1 ? " <span class=\"badge\">multiple Source Agents</span>" : "";
       const updated = formatTimestamp(document.updatedAt);
+      const readDot = document.isUnread ? `<span class="unread-dot" aria-hidden="true"></span>` : "";
       return `<tr>
-        <td class="title-cell"><a href="/d/${document.id}">${escapeHtml(document.title)}</a></td>
+        <td class="title-cell${document.isUnread ? " unread" : ""}">${readDot}<a href="/d/${document.id}">${escapeHtml(document.title)}</a></td>
         <td>${formatTag(document.format)}</td>
         <td><time datetime="${escapeHtml(document.updatedAt)}" title="${escapeHtml(document.updatedAt)}">${escapeHtml(updated)}</time></td>
         <td class="num">${document.revisionCount}</td>
         <td><span class="agent">${icon("agent")}${escapeHtml(document.latestSourceAgent)}</span>${multiple}</td>
-        <td>${deleteDocumentForm(document)}</td>
+        <td>${documentActions(document, "/")}</td>
       </tr>`;
     }).join("\n");
 
@@ -189,18 +190,47 @@ export function buildInroServer(options: BuildServerOptions): FastifyInstance {
     }
   });
 
+  app.post("/d/:id/read", async (request, reply) => {
+    try {
+      documents.markRead((request.params as { id: string }).id);
+      return reply.redirect(readReturnTo(request.body));
+    } catch (error) {
+      if (error instanceof DocumentNotFoundError) return reply.status(404).type("text/html").send(page("Not found", "<p>Document not found.</p>"));
+      throw error;
+    }
+  });
+
+  app.post("/d/:id/unread", async (request, reply) => {
+    try {
+      documents.markUnread((request.params as { id: string }).id);
+      return reply.redirect(readReturnTo(request.body));
+    } catch (error) {
+      if (error instanceof DocumentNotFoundError) return reply.status(404).type("text/html").send(page("Not found", "<p>Document not found.</p>"));
+      throw error;
+    }
+  });
+
   app.get("/d/:id", async (request, reply) => {
-    const document = documents.getDocument((request.params as { id: string }).id);
+    const documentId = (request.params as { id: string }).id;
+    let document = documents.getDocument(documentId);
     if (!document) return reply.status(404).type("text/html").send(page("Not found", "<p>Document not found.</p>"));
+    if (document.isUnread) {
+      documents.markRead(document.id);
+      document = documents.getDocument(document.id)!;
+    }
     const revision = documents.getRevision(document.latestRevisionId)!;
     return reply.type("text/html").send(documentPage({ label: "Latest Revision", document, revision, revisions: documents.listRevisions(document.id) }));
   });
 
   app.get("/d/:id/r/:revisionId", async (request, reply) => {
     const { id, revisionId } = request.params as { id: string; revisionId: string };
-    const document = documents.getDocument(id);
+    let document = documents.getDocument(id);
     const revision = documents.getRevision(revisionId);
     if (!document || !revision || revision.documentId !== id) return reply.status(404).type("text/html").send(page("Not found", "<p>Revision not found.</p>"));
+    if (revision.id === document.latestRevisionId && document.isUnread) {
+      documents.markRead(document.id);
+      document = documents.getDocument(document.id)!;
+    }
     const label = revision.id === document.latestRevisionId ? "Latest Revision" : "Historical Revision";
     return reply.type("text/html").send(documentPage({ label, document, revision, revisions: documents.listRevisions(document.id) }));
   });
@@ -258,10 +288,11 @@ function documentPage(input: { label: string; document: ReturnType<ReturnType<ty
       <a class="back" href="/">${icon("arrow-left")}Documents</a>
       <div class="document-header">
         <h1>${escapeHtml(input.document.title)}</h1>
-        ${deleteDocumentForm(input.document)}
+        ${documentActions(input.document, "/")}
       </div>
       <p class="meta">
         <span class="label">${escapeHtml(input.label)}</span>
+        <span class="sep">·</span>${readState(input.document)}
         <span class="sep">·</span><span class="mi">${icon(input.revision.format === "html" ? "code" : "markdown")}${escapeHtml(input.revision.format)}</span>
         <span class="sep">·</span><span class="mi">${icon("agent")}${escapeHtml(input.revision.sourceAgent)}</span>
       </p>
@@ -276,6 +307,29 @@ function documentPage(input: { label: string; document: ReturnType<ReturnType<ty
     </main>
     ${liveReloadScript(`/d/${input.document.id}/events`)}
   `);
+}
+
+function documentActions(document: { id: string; title: string; isRead?: boolean }, returnTo: string): string {
+  return `<div class="document-actions">
+    ${readStateForm(document, returnTo)}
+    ${deleteDocumentForm(document)}
+  </div>`;
+}
+
+function readStateForm(document: { id: string; isRead?: boolean }, returnTo: string): string {
+  const read = document.isRead === true;
+  const action = read ? "unread" : "read";
+  const label = read ? "Mark unread" : "Mark read";
+  return `<form method="post" action="/d/${document.id}/${action}" class="read-state-form">
+    <input type="hidden" name="returnTo" value="${escapeHtml(returnTo)}" />
+    <button type="submit" class="ghost">${escapeHtml(label)}</button>
+  </form>`;
+}
+
+function readState(document: { isRead: boolean }): string {
+  return document.isRead
+    ? `<span class="read-state read">Read</span>`
+    : `<span class="read-state unread">Unread</span>`;
 }
 
 function deleteDocumentForm(document: { id: string; title: string }): string {
@@ -364,7 +418,9 @@ function page(title: string, body: string): string {
     .ledger tbody tr:last-child td { border-bottom: 0; }
     .ledger tbody tr:hover td { background: rgba(189,59,42,.04); }
     .ledger .title-cell a { font-family: "Fraunces", Georgia, serif; font-size: 1.05rem; font-weight: 500; text-decoration: none; }
+    .ledger .title-cell.unread a { font-weight: 600; }
     .ledger .title-cell a:hover { color: var(--cinnabar); }
+    .unread-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 999px; background: var(--cinnabar); margin-right: .45rem; vertical-align: .08em; }
     .ledger .num { font-variant-numeric: tabular-nums; color: var(--ink-soft); }
     .empty { display: flex; flex-direction: column; align-items: center; gap: .65rem; text-align: center; color: var(--ink-soft); padding: 3rem 1rem; }
     .empty .icon { width: 1.9rem; height: 1.9rem; color: var(--line); }
@@ -381,6 +437,9 @@ function page(title: string, body: string): string {
     .meta .label { color: var(--cinnabar-deep); font-weight: 600; }
     .meta .mi { display: inline-flex; align-items: center; gap: .35rem; }
     .meta .icon { color: var(--ink-soft); }
+    .read-state { display: inline-flex; align-items: center; border-radius: 999px; padding: .13rem .45rem; font-size: .65rem; line-height: 1.2; letter-spacing: .08em; text-transform: uppercase; }
+    .read-state.read { color: var(--ink-soft); border: 1px solid var(--line); }
+    .read-state.unread { color: var(--cinnabar-deep); border: 1px solid rgba(189,59,42,.4); }
     .meta .sep { opacity: .4; margin: 0 .55rem; }
     .notice { color: var(--cinnabar-deep); font-size: .9rem; border-left: 2px solid var(--cinnabar); padding-left: .8rem; margin: 1.25rem 0; }
 
@@ -403,8 +462,10 @@ function page(title: string, body: string): string {
     .timeline .who { color: var(--ink-soft); font-size: .85rem; margin-left: .55rem; }
     .timeline em { display: block; color: var(--ink-soft); font-size: .9rem; margin-top: .15rem; }
 
-    .delete-document { margin: 0; }
-    .ghost-danger { display: inline-flex; align-items: center; gap: .4rem; font: inherit; font-size: .8rem; color: var(--ink-soft); cursor: pointer; background: none; border: 1px solid var(--line); border-radius: 8px; padding: .45rem .75rem; transition: color .15s, border-color .15s, background .15s; }
+    .document-actions { display: flex; align-items: center; justify-content: flex-end; gap: .45rem; }
+    .delete-document, .read-state-form { margin: 0; }
+    .ghost, .ghost-danger { display: inline-flex; align-items: center; gap: .4rem; font: inherit; font-size: .8rem; color: var(--ink-soft); cursor: pointer; background: none; border: 1px solid var(--line); border-radius: 8px; padding: .45rem .75rem; transition: color .15s, border-color .15s, background .15s; white-space: nowrap; }
+    .ghost:hover { color: var(--cinnabar); border-color: var(--cinnabar); background: rgba(189,59,42,.04); }
     .ghost-danger:hover { color: #fcefe4; background: var(--cinnabar); border-color: var(--cinnabar); }
 
     .login { max-width: 360px; margin: 14vh auto 0; text-align: center; animation: rise .55s both; }
@@ -483,8 +544,17 @@ function emptyToUndefined(value: string | undefined): string | undefined {
   return value && value.length > 0 ? value : undefined;
 }
 
-function readFormToken(body: unknown): string | undefined {
-  if (typeof body === "string") return new URLSearchParams(body).get("token") ?? undefined;
-  if (body && typeof body === "object" && "token" in body) return String((body as { token: unknown }).token);
+function readReturnTo(body: unknown): string {
+  const returnTo = readFormField(body, "returnTo");
+  return returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/";
+}
+
+function readFormField(body: unknown, field: string): string | undefined {
+  if (typeof body === "string") return new URLSearchParams(body).get(field) ?? undefined;
+  if (body && typeof body === "object" && field in body) return String((body as Record<string, unknown>)[field]);
   return undefined;
+}
+
+function readFormToken(body: unknown): string | undefined {
+  return readFormField(body, "token");
 }
