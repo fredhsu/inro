@@ -148,11 +148,9 @@ export function buildInroServer(options: BuildServerOptions): FastifyInstance {
       const readDot = document.isUnread ? `<span class="unread-dot" aria-hidden="true"></span>` : "";
       return `<tr>
         <td class="title-cell${document.isUnread ? " unread" : ""}">${readDot}<a href="/d/${document.id}">${escapeHtml(document.title)}</a></td>
-        <td>${formatTag(document.format)}</td>
         <td><time datetime="${escapeHtml(document.updatedAt)}" title="${escapeHtml(document.updatedAt)}">${escapeHtml(updated)}</time></td>
-        <td class="num">${document.revisionCount}</td>
         <td><span class="agent">${icon("agent")}${escapeHtml(document.latestSourceAgent)}</span>${multiple}</td>
-        <td>${documentActions(document, "/")}</td>
+        <td>${documentActions(document, "/", { iconOnlyReadState: true, iconOnlyDelete: true })}</td>
       </tr>`;
     }).join("\n");
 
@@ -161,8 +159,8 @@ export function buildInroServer(options: BuildServerOptions): FastifyInstance {
       <main>
         <h1>Documents</h1>
         <table class="ledger">
-          <thead><tr><th>Title</th><th>Format</th><th>Updated</th><th>Revisions</th><th>Source Agent</th><th></th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="6"><div class="empty">${icon("inbox")}<p>No Documents yet.</p></div></td></tr>`}</tbody>
+          <thead><tr><th>Title</th><th>Updated</th><th>Source Agent</th><th></th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="4"><div class="empty">${icon("inbox")}<p>No Documents yet.</p></div></td></tr>`}</tbody>
         </table>
       </main>
       ${liveReloadScript("/events")}
@@ -309,20 +307,22 @@ function documentPage(input: { label: string; document: ReturnType<ReturnType<ty
   `);
 }
 
-function documentActions(document: { id: string; title: string; isRead?: boolean }, returnTo: string): string {
+function documentActions(document: { id: string; title: string; isRead?: boolean }, returnTo: string, options: { iconOnlyReadState?: boolean; iconOnlyDelete?: boolean } = {}): string {
   return `<div class="document-actions">
-    ${readStateForm(document, returnTo)}
-    ${deleteDocumentForm(document)}
+    ${readStateForm(document, returnTo, options)}
+    ${deleteDocumentForm(document, options)}
   </div>`;
 }
 
-function readStateForm(document: { id: string; isRead?: boolean }, returnTo: string): string {
+function readStateForm(document: { id: string; title?: string; isRead?: boolean }, returnTo: string, options: { iconOnlyReadState?: boolean } = {}): string {
   const read = document.isRead === true;
   const action = read ? "unread" : "read";
   const label = read ? "Mark unread" : "Mark read";
+  const buttonContent = options.iconOnlyReadState ? icon(read ? "envelope" : "envelope-open") : escapeHtml(label);
+  const accessibleLabel = options.iconOnlyReadState ? ` aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"` : "";
   return `<form method="post" action="/d/${document.id}/${action}" class="read-state-form">
     <input type="hidden" name="returnTo" value="${escapeHtml(returnTo)}" />
-    <button type="submit" class="ghost">${escapeHtml(label)}</button>
+    <button type="submit" class="ghost"${accessibleLabel}>${buttonContent}</button>
   </form>`;
 }
 
@@ -332,9 +332,11 @@ function readState(document: { isRead: boolean }): string {
     : `<span class="read-state unread">Unread</span>`;
 }
 
-function deleteDocumentForm(document: { id: string; title: string }): string {
+function deleteDocumentForm(document: { id: string; title: string }, options: { iconOnlyDelete?: boolean } = {}): string {
+  const label = options.iconOnlyDelete ? "" : "Delete";
+  const accessibleLabel = options.iconOnlyDelete ? ` aria-label="Delete ${escapeHtml(document.title)}" title="Delete"` : "";
   return `<form method="post" action="/d/${document.id}/delete" class="delete-document">
-    <button type="submit" class="ghost-danger" data-confirm="${deleteConfirmation(document.title)}" onclick="return confirm(this.dataset.confirm)">${icon("trash")}Delete</button>
+    <button type="submit" class="ghost-danger"${accessibleLabel} data-confirm="${deleteConfirmation(document.title)}" onclick="return confirm(this.dataset.confirm)">${icon("trash")}${label}</button>
   </form>`;
 }
 
@@ -512,6 +514,8 @@ function masthead(): string {
 const iconPaths: Record<string, string> = {
   "arrow-left": '<path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/>',
   trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 11v6M14 11v6"/>',
+  envelope: '<rect x="4" y="6" width="16" height="12" rx="1.5"/><path d="m4.5 7 7.5 6 7.5-6"/>',
+  "envelope-open": '<path d="M4 10v8h16v-8"/><path d="m4 10 8 6 8-6"/><path d="m4 10 8-6 8 6"/>',
   code: '<path d="M16 18l6-6-6-6"/><path d="M8 6l-6 6 6 6"/>',
   markdown: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M9 13h6"/><path d="M9 17h4"/>',
   agent: '<rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9.5 9.5h5v5h-5z"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',

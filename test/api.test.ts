@@ -131,8 +131,8 @@ describe("HTTP API and browser UI", () => {
       assert.equal(second.statusCode, 200);
       assert.deepEqual(second.json(), first.json());
 
-      const index = await app.inject({ method: "GET", url: "/", headers: auth("token") });
-      assert.match(index.body, /<td class="num">1<\/td>/);
+      const detail = await app.inject({ method: "GET", url: (first.json() as { latestUrl: string }).latestUrl, headers: auth("token") });
+      assert.equal((detail.body.match(/<li class="latest">/g) ?? []).length, 1);
     } finally {
       await app.close();
       store.close();
@@ -152,7 +152,8 @@ describe("HTTP API and browser UI", () => {
       assert.match(unreadIndex.body, /<td class="title-cell unread"><span class="unread-dot" aria-hidden="true"><\/span><a href="\/d\/[^"]+">Read Me<\/a><\/td>/);
       assert.doesNotMatch(unreadIndex.body, /unread-badge/);
       assert.match(unreadIndex.body, new RegExp(`action="/d/${documentId}/read"`));
-      assert.match(unreadIndex.body, />Mark read<\/button>/);
+      assert.match(unreadIndex.body, /aria-label="Mark read" title="Mark read"><svg class="icon"/);
+      assert.doesNotMatch(unreadIndex.body, />Mark read<\/button>/);
 
       const markedRead = await app.inject({ method: "POST", url: `/d/${documentId}/read`, headers: auth("token") });
       assert.equal(markedRead.statusCode, 302);
@@ -160,7 +161,8 @@ describe("HTTP API and browser UI", () => {
       const readIndex = await app.inject({ method: "GET", url: "/", headers: auth("token") });
       assert.doesNotMatch(readIndex.body, /<td class="title-cell unread">[\s\S]*Read Me/);
       assert.match(readIndex.body, new RegExp(`action="/d/${documentId}/unread"`));
-      assert.match(readIndex.body, />Mark unread<\/button>/);
+      assert.match(readIndex.body, /aria-label="Mark unread" title="Mark unread"><svg class="icon"/);
+      assert.doesNotMatch(readIndex.body, />Mark unread<\/button>/);
 
       const markedUnread = await app.inject({ method: "POST", url: `/d/${documentId}/unread`, headers: auth("token") });
       assert.equal(markedUnread.statusCode, 302);
@@ -213,13 +215,15 @@ describe("HTTP API and browser UI", () => {
       assert.doesNotMatch(index.body, /htmx\.org/);
       assert.doesNotMatch(index.body, /hx-delete/);
       assert.match(index.body, new RegExp(`action="/d/${documentId}/delete"`));
-      assert.match(index.body, /Delete<\/button>/);
+      assert.match(index.body, /aria-label="Delete Danger &amp; Math" title="Delete"/);
+      assert.doesNotMatch(index.body, /Delete<\/button>/);
       assert.match(index.body, /data-confirm="Delete “Danger &amp; Math” and all of its Revisions\? This cannot be undone\."/);
       assert.match(index.body, /onclick="return confirm\(this\.dataset\.confirm\)"/);
 
       const detail = await app.inject({ method: "GET", url: `/d/${documentId}`, headers: auth("token") });
       assert.equal(detail.statusCode, 200);
       assert.match(detail.body, new RegExp(`action="/d/${documentId}/delete"`));
+      assert.match(detail.body, /Delete<\/button>/);
       assert.doesNotMatch(detail.body, /hx-delete/);
     } finally {
       await app.close();
